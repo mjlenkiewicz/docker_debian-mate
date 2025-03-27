@@ -1,0 +1,196 @@
+# remove "### !!!" to install the software that you need"
+
+# To fully secure supply chain integrity, pin the image version to a specific digest.
+FROM debian:bookworm@sha256:0cc7b2132ebf8d535c3a8efd12be46902dd58c496dae66c478a6e64d9588a38d
+
+# Update & upgrade
+RUN apt update -y
+# RUN apt upgrade -y
+
+# Add sudo
+RUN apt install -y sudo
+
+# Change "root" password without using plain text (hashed pass with openssl)
+RUN echo 'root:$6$YyW6hMYN.2p.LQEE$wMbDAoZEnGFAYi0ZJi84jj.CVrTzaLjf/lQY.GINi5e.O.mlWkYTAfk4zBwzi.EiJkikmgkPo2tTPeSNjERXQ/' | chpasswd -e
+
+# Create a new user called "test" with sudo privileges
+RUN sudo adduser test
+# Change "test" password without using plain text (hashed pass with openssl)
+# Access to https://www.cryptool.org/en/cto/openssl/ and run "openssl passwd -6" to generate the desired hashed password
+RUN echo 'test:$6$UAE.ccMNV70FV0Su$2vg0L2.GSGTg6nEURHc/uj6mTVgyfCTsOmvC6ERi.tNmjxEm7wSNMjtnkbmONcduHyTojojx.pG8jk8aZyYNL0' | chpasswd -e
+# Add "test" user to sudoers group
+RUN usermod -aG sudo test   
+
+RUN apt install -y locales keyboard-configuration
+# Set environment variables / avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG="en_US.UTF-8"
+ENV TZ="America/Argentina/Buenos_Aires"
+RUN ln -sf /usr/share/zoneinfo/America/Argentina/Buenos_Aires /etc/localtime && \
+    echo $TZ > /etc/timezone
+RUN dpkg-reconfigure keyboard-configuration --frontend=noninteractive && \
+    echo 'KEYBOARD_LAYOUT="es"' >> /etc/default/keyboard
+ENV HOSTNAME="debian"
+
+# Set the desktop geometry for RDP/VNC
+ENV GEOMETRY=1920x1080
+
+# Install all the packages needed for the graphical environment and more ...
+RUN apt install -y mate-desktop-environment-core
+RUN apt install -y xorg xkb-data
+RUN apt install -y dbus-x11 x11-apps
+
+# Install SAMBA for supporting Windows network file sharing
+RUN apt install -f -y cifs-utils samba samba-client
+
+# Install and configure xrdp and certificate for RDP access
+RUN apt install -y xrdp
+RUN adduser xrdp ssl-cert
+RUN echo "port=3389" >> etc/xrdp/xrdp.ini
+RUN echo systemctl enable xrdp
+
+# Install CURL, WGET & GPG &
+RUN apt install -y curl wget gpg
+
+### !!! # Install FLATPAK
+### !!! RUN apt install -y flatpak
+### !!! # Add the Flathub repository
+### !!! RUN flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+### !!! # Install Brave (it's not stable if we install it following the traditional way - debian 12 distro issues? --> alt. use flatpak)
+### !!! # RUN curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+### !!! # RUN echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" | tee /etc/apt/sources.list.d/brave-browser-release.list
+### !!! # RUN apt update -y
+### !!! # RUN apt install -y brave-browser
+### !!! RUN flatpak install -y flathub com.brave.Browser
+### !!! CMD ["flatpak", "run", "com.brave.Browser"]
+
+# Install Firefox (if you prefer it instead of Brave)
+RUN wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- | tee /etc/apt/keyrings/packages.mozilla.org.asc > /dev/null
+RUN echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" | tee -a /etc/apt/sources.list.d/mozilla.list > /dev/null
+RUN apt update -y 
+RUN apt install -y firefox
+
+# Install VSCode --> you could try VSCodium (alternative, same as VSCode but without MS bullshit)
+RUN wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg
+RUN install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
+RUN echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | tee /etc/apt/sources.list.d/vscode.list > /dev/null
+RUN rm -f packages.microsoft.gpg
+RUN apt install -y apt-transport-https
+RUN apt update -y
+RUN apt install -y code
+
+# Install GIT
+RUN apt install -y git-all install-info
+
+# Install Miniconda
+RUN mkdir -p /opt/miniconda3
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /opt/miniconda3/miniconda.sh
+RUN bash /opt/miniconda3/miniconda.sh -b -u -p /opt/miniconda3
+RUN rm /opt/miniconda3/miniconda.sh
+#Create group
+RUN groupadd miniconda3
+# Change group ownership 
+RUN chgrp -R miniconda3 /opt/miniconda3/bin
+# Set read and write permissions
+RUN chmod 770 -R /opt/miniconda3/bin
+# Add users to group
+RUN sudo adduser test miniconda3
+# Create new conda enviroment called "py39env" with python 3.9
+RUN /opt/miniconda3/bin/conda create -y --name py39env python=3.9
+# Activate/Deactivate miniconda3 manually in your session using...
+# > source /opt/miniconda3/bin/activate
+# > conda init
+# > conda deactivate
+
+# Install nodejs & npm (The last mentioned comes with nodejs)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+RUN apt install -y nodejs
+
+# Install common Netwoking / Net Tools
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>> # >>>>>>>>>>>>>>>>>>>>>>>>>>>> # >>>>>>>>>>>>>>>>>>>>>>>>>>>>
+RUN apt install -y ethtool net-tools iputils-ping 
+# ... and more Networking Tools
+RUN apt install -y traceroute tcpdump nmap
+# ... VNC / RDP Client
+RUN apt install -y remmina
+
+### !!! # Install for running setcap command
+### !!! RUN apt install -y libcap2-bin
+
+### !!! # Install Wireshark
+### !!! RUN DEBIAN_FRONTEND=noninteractive apt install -y wireshark
+### !!! RUN yes yes | DEBIAN_FRONTEND=teletype dpkg-reconfigure wireshark-common
+### !!! # RUN groupadd wireshark --> this group already exists !!!
+### !!! RUN usermod -aG wireshark test
+### !!! RUN groupadd pcap
+### !!! RUN usermod -aG pcap test
+### !!! # GIVE permision for seeing eth0 interface to common user
+### !!! RUN chgrp pcap /usr/bin/tcpdump
+### !!! RUN chmod 750 /usr/bin/tcpdump
+### !!! RUN setcap cap_net_raw,cap_net_admin=eip /usr/bin/tcpdump
+### !!! # you must run the docker using --cap-add=NET_ADMIN --cap-add=NET_RAW options !!!
+### !!! # be careful, this enable to everybody to see all the docker network interfaces !
+
+# Install Other Tools (... Calculator, Plain Text Editor, Img. Visualizar, Video & Audio Player, etc)
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>> # >>>>>>>>>>>>>>>>>>>>>>>>>>>> # >>>>>>>>>>>>>>>>>>>>>>>>>>>>
+RUN apt install -f -y p7zip-full file-roller qalculate-gtk pluma qimgv vlc nano filezilla
+
+# For running extra tools for customizing look & feel (not necessary, but useful if you like...)
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>> # >>>>>>>>>>>>>>>>>>>>>>>>>>>> # >>>>>>>>>>>>>>>>>>>>>>>>>>>>
+# RUN apt install -y mate-tweak
+# and / or ...
+RUN apt install -y dconf-cli dconf-editor
+# IMPORTANT: RUN THIS ON test USER TERMINAL FOR CHAGING KEYBOARD TO SPANISH LAYOUT ON MATE GUI
+# dconf write /org/mate/desktop/peripherals/keyboard/kbd/layouts "['es']"
+
+# Clean the local repository of retrieved package files removing all stored archives in directory
+# /var/cache/apt/archives/, except for the lock file, to free up disk space; and remove all files
+# in the /var/lib/apt/lists/ directory, which contains package lists and indexes downloaded by
+# apt update. IMPORTANT: Do not use this line until all needed pkg were installed!!!
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>> # >>>>>>>>>>>>>>>>>>>>>>>>>>>> # >>>>>>>>>>>>>>>>>>>>>>>>>>>>
+RUN apt clean -y && rm -rf /var/lib/apt/lists/*
+### !!! RUN flatpak uninstall -y --unused
+
+# Expose RDP Port
+EXPOSE 3390
+
+# File for custom XRDP login screen
+COPY /assets/my_login_screen/etc/xrdp/xrdp.ini /etc/xrdp
+
+# File Keyboard layout for CLI (mine is PC104 spanish latam model)
+COPY assets/my_keyboard/etc/default/keyboard /etc/default/keyboard
+RUN chmod 664 /etc/default/keyboard
+
+# Files for custom Look & Feel
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>> # >>>>>>>>>>>>>>>>>>>>>>>>>>>> # >>>>>>>>>>>>>>>>>>>>>>>>>>>>
+# Copy the background files
+COPY assets/my_backgrounds/*.* /usr/share/backgrounds/
+RUN chmod 664 /usr/share/backgrounds/*.png
+RUN chmod 664 /usr/share/backgrounds/*.jpg
+# Copy the icon files (BeautyLineSimple directory and others if there are)
+# BeautyLineSimple is set as default icon theme on file 20_mate-debian.gschema.override !!!
+COPY ./assets/my_look_&_feel/usr/share/icons/. /usr/share/icons/
+# Copy the modified layout file
+COPY assets/my_look_&_feel/usr/share/mate-panel/layouts/default.layout /usr/share/mate-panel/layouts/
+RUN chmod 664 /usr/share/mate-panel/layouts/*.layout
+# Copy the modified schema files
+COPY assets/my_look_&_feel/usr/share/glib-2.0/schemas/10_gsettings-desktop-schemas.gschema.override /usr/share/glib-2.0/schemas/
+COPY assets/my_look_&_feel/usr/share/glib-2.0/schemas/10_mate-common.gschema.override /usr/share/glib-2.0/schemas/
+COPY assets/my_look_&_feel/usr/share/glib-2.0/schemas/20_mate-debian.gschema.override /usr/share/glib-2.0/schemas/
+# Modify the files permission for leaving it as there were originally
+RUN chmod 664 /usr/share/glib-2.0/schemas/*.override
+# Compile the new files that we changed for seeing the new look & feel
+RUN glib-compile-schemas /usr/share/glib-2.0/schemas/
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>> # >>>>>>>>>>>>>>>>>>>>>>>>>>>> # >>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+# Copy the script for ...
+# >>> running services
+# >>> set the timezone
+# >>> etc
+# ... into the container
+COPY /assets/my_scripts/start_serv-bash.sh /usr/local/bin/
+# Make the script executable
+RUN chmod +x /usr/local/bin/start_serv-bash.sh
+# Set the script as the entrypoint
+ENTRYPOINT ["/usr/local/bin/start_serv-bash.sh"]
