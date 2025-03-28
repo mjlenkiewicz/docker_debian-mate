@@ -10,7 +10,8 @@ https://docs.docker.com/engine/install/
 for Windows see ...
 https://docs.docker.com/desktop/setup/install/windows-install/
 
-Then, with the files already in your PC run the following commands ...
+Then, with the files already on your PC and the zip file uncompressed in a folder with the
+same name (assets), run the following commands ...
 
 1) create a network for using with the container
 # on Linux
